@@ -511,7 +511,7 @@ function loadHazard(type) {
         }).catch(e => setStatus('⚠ Ураганы: ' + e.message));
 
     } else if (type === 'tornadoes') {
-        // Tornado risk zones from FEMA NRI with cross-hatch pattern
+        // Tornado risk zones from NOAA SPC (1950-2024) with cross-hatch pattern
         setStatus('Загрузка зон торнадо…');
 
         // High risk: dense cross-hatch (magenta)
@@ -532,41 +532,43 @@ function loadHazard(type) {
             color: '#cc66cc', spaceColor: 'transparent',
             weight: 0.5, spaceWeight: 5, angle: -45, opacity: 0.4
         });
-        [hatchHi1, hatchHi2, hatchMod1, hatchMod2].forEach(h => h.addTo(map));
+        // Low risk: very sparse cross-hatch (pale)
+        const hatchLo1 = new L.StripePattern({
+            color: '#aa88aa', spaceColor: 'transparent',
+            weight: 0.5, spaceWeight: 7, angle: 45, opacity: 0.2
+        });
+        const hatchLo2 = new L.StripePattern({
+            color: '#aa88aa', spaceColor: 'transparent',
+            weight: 0.5, spaceWeight: 7, angle: -45, opacity: 0.2
+        });
+        [hatchHi1, hatchHi2, hatchMod1, hatchMod2, hatchLo1, hatchLo2].forEach(h => h.addTo(map));
 
         fetch(PROXY_BASE + '/data/hazard-zones/tornado-zones.geojson').then(r => r.json()).then(data => {
             const group = L.layerGroup([], { pane: 'hazardPane' });
-            const highFeatures = data.features.filter(f => f.properties.risk_level === 'high');
-            const modFeatures = data.features.filter(f => f.properties.risk_level === 'moderate');
-
-            // High risk layer
-            if (highFeatures.length) {
-                L.geoJSON({type:'FeatureCollection', features: highFeatures}, {
+            const levels = [
+                { key: 'high', color: '#ff00ff', opacity: 0.5, h1: hatchHi1, h2: hatchHi2 },
+                { key: 'moderate', color: '#cc66cc', opacity: 0.3, h1: hatchMod1, h2: hatchMod2 },
+                { key: 'low', color: '#aa88aa', opacity: 0.2, h1: hatchLo1, h2: hatchLo2 }
+            ];
+            let totalCells = 0;
+            levels.forEach(lv => {
+                const feats = data.features.filter(f => f.properties.risk_level === lv.key);
+                if (!feats.length) return;
+                totalCells += feats.reduce((s,f) => s + (f.properties.cell_count || 0), 0);
+                L.geoJSON({type:'FeatureCollection', features: feats}, {
                     pane: 'hazardPane',
-                    style: { color: '#ff00ff', weight: 0.5, opacity: 0.5, fillPattern: hatchHi1, fillOpacity: 1 },
+                    style: { color: lv.color, weight: 0.5, opacity: lv.opacity, fillPattern: lv.h1, fillOpacity: 1 },
                     onEachFeature: (feat, layer) => layer.bindPopup(feat.properties.name)
                 }).addTo(group);
-                L.geoJSON({type:'FeatureCollection', features: highFeatures}, {
+                L.geoJSON({type:'FeatureCollection', features: feats}, {
                     pane: 'hazardPane',
-                    style: { color: 'transparent', weight: 0, fillPattern: hatchHi2, fillOpacity: 1 }
+                    style: { color: 'transparent', weight: 0, fillPattern: lv.h2, fillOpacity: 1 }
                 }).addTo(group);
-            }
-            // Moderate risk layer
-            if (modFeatures.length) {
-                L.geoJSON({type:'FeatureCollection', features: modFeatures}, {
-                    pane: 'hazardPane',
-                    style: { color: '#cc66cc', weight: 0.5, opacity: 0.3, fillPattern: hatchMod1, fillOpacity: 1 },
-                    onEachFeature: (feat, layer) => layer.bindPopup(feat.properties.name)
-                }).addTo(group);
-                L.geoJSON({type:'FeatureCollection', features: modFeatures}, {
-                    pane: 'hazardPane',
-                    style: { color: 'transparent', weight: 0, fillPattern: hatchMod2, fillOpacity: 1 }
-                }).addTo(group);
-            }
+            });
 
             group.addTo(map);
             hazardLayers[type] = group;
-            setStatus('✓ Зоны торнадо (FEMA NRI: ' + (highFeatures.length + modFeatures.length) + ' уездов)');
+            setStatus('✓ Зоны торнадо (NOAA SPC 1950-2024, 3 уровня)');
         }).catch(e => setStatus('⚠ Торнадо: ' + e.message));
     }
 }
