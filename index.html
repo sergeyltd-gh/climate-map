@@ -290,6 +290,18 @@ void main(void) {
 }
 `;
 
+// --- Environment detection ---
+// On GitHub Pages: host = github.io, proxy = Tailscale Funnel
+// On Tailscale Funnel: path starts with /climate/, proxy = /climate/proxy/...
+// On RPi LAN (port 8090): no prefix, proxy = /proxy/...
+const IS_GITHUB = location.hostname.includes('github.io');
+const IS_FUNNEL = location.pathname.startsWith('/climate');
+const PROXY_BASE = IS_GITHUB
+    ? 'https://hermes.fin-tench.ts.net/climate'
+    : IS_FUNNEL
+        ? '/climate'
+        : '';
+
 // --- Base layers ---
 const bases = {
     dark: L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png', {
@@ -303,7 +315,9 @@ const bases = {
     }),
     hypsometric: L.tileLayer.gl({
         fragmentShader: hypsoShader,
-        tileUrls: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
+        tileUrls: [(IS_GITHUB || IS_FUNNEL)
+            ? PROXY_BASE + '/proxy/terrain/{z}/{x}/{y}.png'
+            : 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
         attribution: 'Terrain: AWS Open Data (Mapzen)',
         maxZoom: 12,
         noWrap: false
@@ -314,7 +328,8 @@ let currentBase = bases.dark.addTo(map);
 koppenWMS.addTo(map);
 
 // Load population PMTiles
-const pmt = new pmtiles.PMTiles('/proxy/pmtiles');
+const pmtUrl = IS_GITHUB ? PROXY_BASE + '/proxy/pmtiles' : '/proxy/pmtiles';
+const pmt = new pmtiles.PMTiles(pmtUrl);
 pmt.getHeader().then(() => {
     const popLayer = pmtiles.leafletRasterLayer(pmt, {
         attribution: 'GHSL 2020, EU JRC',
@@ -365,7 +380,7 @@ function volcanoIcon(color) {
     return L.divIcon({
         className: 'volcano-icon',
         html: `<svg width="14" height="14" viewBox="0 0 14 14" xmlns="http://www.w3.org/2000/svg">
-            <polygon points="7,2 12,12 2,12" fill="none" stroke="${color}" stroke-width="1"/>
+            <polygon points="7,2 12,12 2,12" fill="none" stroke="${color}" stroke-width="0.5"/>
         </svg>`,
         iconSize: [14, 14],
         iconAnchor: [7, 7]
@@ -400,11 +415,11 @@ function loadHazard(type) {
         // Grid/cell patterns
         const gridH = new L.StripePattern({
             color: '#ff6600', spaceColor: 'transparent',
-            weight: 1, spaceWeight: 4, angle: 0, opacity: 0.4
+            weight: 0.5, spaceWeight: 4, angle: 0, opacity: 0.4
         });
         const gridV = new L.StripePattern({
             color: '#ff6600', spaceColor: 'transparent',
-            weight: 1, spaceWeight: 4, angle: 90, opacity: 0.4
+            weight: 0.5, spaceWeight: 4, angle: 90, opacity: 0.4
         });
         gridH.addTo(map);
         gridV.addTo(map);
@@ -418,7 +433,7 @@ function loadHazard(type) {
                 pane: 'hazardPane',
                 style: {
                     color: '#ff6600',
-                    weight: 1,
+                    weight: 0.5,
                     opacity: 0.4,
                     dashArray: '4,3',
                     fillPattern: gridH,
@@ -443,7 +458,7 @@ function loadHazard(type) {
                     pane: 'hazardPane',
                     style: {
                         color: '#ffaa44',
-                        weight: 1,
+                        weight: 0.5,
                         opacity: 0.7
                     },
                     onEachFeature: (feat, layer) => {
@@ -466,7 +481,7 @@ function loadHazard(type) {
 
         const stripes = new L.StripePattern({
             color: '#00ffff', spaceColor: 'transparent',
-            weight: 1, spaceWeight: 5, angle: 45, opacity: 0.7
+            weight: 0.5, spaceWeight: 5, angle: 45, opacity: 0.7
         });
         stripes.addTo(map);
 
@@ -476,7 +491,7 @@ function loadHazard(type) {
                 pane: 'hazardPane',
                 style: {
                     color: '#00ffff',
-                    weight: 1,
+                    weight: 0.5,
                     opacity: 0.5,
                     fillPattern: stripes,
                     fillOpacity: 1
@@ -497,11 +512,11 @@ function loadHazard(type) {
 
         const hatch1 = new L.StripePattern({
             color: '#ff00ff', spaceColor: 'transparent',
-            weight: 1, spaceWeight: 4, angle: 45, opacity: 0.6
+            weight: 0.5, spaceWeight: 4, angle: 45, opacity: 0.6
         });
         const hatch2 = new L.StripePattern({
             color: '#ff00ff', spaceColor: 'transparent',
-            weight: 1, spaceWeight: 4, angle: -45, opacity: 0.6
+            weight: 0.5, spaceWeight: 4, angle: -45, opacity: 0.6
         });
         hatch1.addTo(map);
         hatch2.addTo(map);
@@ -512,7 +527,7 @@ function loadHazard(type) {
             L.geoJSON(data, {
                 pane: 'hazardPane',
                 style: {
-                    color: '#ff00ff', weight: 1, opacity: 0.4,
+                    color: '#ff00ff', weight: 0.5, opacity: 0.4,
                     fillPattern: hatch1, fillOpacity: 1
                 },
                 onEachFeature: (feat, layer) => {
