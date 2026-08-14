@@ -131,9 +131,12 @@ html, body { height: 100%; width: 100%; overflow: hidden; }
     font-size: 11px; width: 12px; text-align: center; line-height: 10px;
 }
 
-/* Population pane - multiply blend */
+/* Population pane - multiply blend + black dot effect */
 .leaflet-pop-pane {
     mix-blend-mode: multiply;
+}
+.pop-density-overlay {
+    filter: grayscale(100%) contrast(300%) brightness(0.3) invert(1);
 }
 
 /* Hazard pane */
@@ -258,16 +261,16 @@ map.createPane('hazardPane');
 map.getPane('hazardPane').style.zIndex = 500;
 map.getPane('hazardPane').style.pointerEvents = 'auto';
 
-// --- Hypsometric shader (Terrarium encoding) ---
+// --- Hypsometric shader (Mapbox terrain-RGB encoding) ---
 const hypsoShader = `
 void main(void) {
     highp vec4 texelColour = texture2D(uTexture0, vec2(vTextureCoords.s, vTextureCoords.t));
-    // Terrarium encoding: height = (r*256 + g + b/256) - 32768
+    // Mapbox encoding: height = -10000 + (r*65536 + g*256 + b) * 0.1
     highp float height = (
-        texelColour.r * 256.0 +
-        texelColour.g +
-        texelColour.b / 256.0
-    ) - 32768.0;
+        texelColour.r * 65536.0 +
+        texelColour.g * 256.0 +
+        texelColour.b
+    ) * 0.1 - 10000.0;
 
     // Hypsometric color ramp
     vec4 colours[6];
@@ -315,10 +318,8 @@ const bases = {
     }),
     hypsometric: L.tileLayer.gl({
         fragmentShader: hypsoShader,
-        tileUrls: [(IS_GITHUB || IS_FUNNEL)
-            ? PROXY_BASE + '/proxy/terrain/{z}/{x}/{y}.png'
-            : 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
-        attribution: 'Terrain: AWS Open Data (Mapzen)',
+        tileUrls: ['https://api.trailsplits.com/tiles/v1/terrainrgb/current/{z}/{x}/{y}.png'],
+        attribution: 'Terrain: TrailSplits (Copernicus DEM 30m)',
         maxZoom: 12,
         noWrap: false
     })
@@ -327,32 +328,32 @@ const bases = {
 let currentBase = bases.dark.addTo(map);
 koppenWMS.addTo(map);
 
-// Load population PMTiles
-const pmtUrl = (IS_GITHUB || IS_FUNNEL) ? PROXY_BASE + '/proxy/pmtiles' : '/proxy/pmtiles';
-const pmt = new pmtiles.PMTiles(pmtUrl);
-pmt.getHeader().then(() => {
-    const popLayer = pmtiles.leafletRasterLayer(pmt, {
-        attribution: 'GHSL 2020, EU JRC',
+// Load population from NASA GIBS WMTS (CORS-enabled, works on GitHub Pages)
+const popLayer = L.tileLayer(
+    'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/GPW_Population_Density_2020/default/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png',
+    {
+        attribution: 'NASA GIBS / SEDAC GPWv4',
         pane: 'popPane',
         maxZoom: 10,
+        maxNativeZoom: 7,
         minZoom: 2,
-        opacity: 0.6
-    });
-    popLayer.addTo(map);
-    document.getElementById('pop-status').textContent = '✓ Население загружено';
+        opacity: 0.6,
+        className: 'pop-density-overlay',
+        noWrap: false
+    }
+);
+popLayer.addTo(map);
+document.getElementById('pop-status').textContent = '✓ Население загружено (NASA GIBS)';
 
-    const popSlider = document.getElementById('pop-opacity');
-    const popVal = document.getElementById('pop-val');
-    popSlider.addEventListener('input', e => {
-        popLayer.setOpacity(e.target.value / 100);
-        popVal.textContent = e.target.value + '%';
-    });
-    document.getElementById('toggle-pop').addEventListener('change', e => {
-        if (e.target.checked) map.addLayer(popLayer);
-        else map.removeLayer(popLayer);
-    });
-}).catch(err => {
-    document.getElementById('pop-status').textContent = '⚠ Население: ' + err.message;
+const popSlider = document.getElementById('pop-opacity');
+const popVal = document.getElementById('pop-val');
+popSlider.addEventListener('input', e => {
+    popLayer.setOpacity(e.target.value / 100);
+    popVal.textContent = e.target.value + '%';
+});
+document.getElementById('toggle-pop').addEventListener('change', e => {
+    if (e.target.checked) map.addLayer(popLayer);
+    else map.removeLayer(popLayer);
 });
 
 // --- Hazard layers (toggle on/off, multiple can be active) ---
@@ -394,7 +395,7 @@ function loadHazard(type) {
 
     if (type === 'volcanoes') {
         setStatus('Загрузка вулканов…');
-        fetch('volcanoes.json').then(r => r.json()).then(data => {
+        fetch(PROXY_BASE + '/volcanoes.json').then(r => r.json()).then(data => {
             const group = L.layerGroup([], { pane: 'hazardPane' });
             data.forEach(v => {
                 const color = v.status === 'Historical' ? '#ff4444' :
@@ -427,7 +428,7 @@ function loadHazard(type) {
         const group = L.layerGroup([], { pane: 'hazardPane' });
 
         // Load seismic zone polygons (buffered fault lines) with grid hatch + dashed outline
-        fetch('data/hazard-zones/seismic-zones.geojson').then(r => r.json()).then(zoneData => {
+        fetch(PROXY_BASE + '/data/hazard-zones/seismic-zones.geojson').then(r => r.json()).then(zoneData => {
             // Horizontal grid
             L.geoJSON(zoneData, {
                 pane: 'hazardPane',
@@ -453,7 +454,7 @@ function loadHazard(type) {
             }).addTo(group);
 
             // Load fault lines as thin 1px lines on top (GEM Active Faults)
-            fetch('data/hazard-zones/gem-faults.geojson').then(r2 => r2.json()).then(faultData => {
+            fetch(PROXY_BASE + '/data/hazard-zones/gem-faults.geojson').then(r2 => r2.json()).then(faultData => {
                 L.geoJSON(faultData, {
                     pane: 'hazardPane',
                     style: {
@@ -485,7 +486,7 @@ function loadHazard(type) {
         });
         stripes.addTo(map);
 
-        fetch('data/hazard-zones/tropical-cyclone-basins.geojson').then(r => r.json()).then(data => {
+        fetch(PROXY_BASE + '/data/hazard-zones/tropical-cyclone-basins.geojson').then(r => r.json()).then(data => {
             const group = L.layerGroup([], { pane: 'hazardPane' });
             L.geoJSON(data, {
                 pane: 'hazardPane',
@@ -507,45 +508,62 @@ function loadHazard(type) {
         }).catch(e => setStatus('⚠ Ураганы: ' + e.message));
 
     } else if (type === 'tornadoes') {
-        // Tornado risk zones from GeoJSON with cross-hatch pattern
+        // Tornado risk zones from FEMA NRI with cross-hatch pattern
         setStatus('Загрузка зон торнадо…');
 
-        const hatch1 = new L.StripePattern({
+        // High risk: dense cross-hatch (magenta)
+        const hatchHi1 = new L.StripePattern({
             color: '#ff00ff', spaceColor: 'transparent',
-            weight: 0.5, spaceWeight: 4, angle: 45, opacity: 0.6
+            weight: 0.5, spaceWeight: 3, angle: 45, opacity: 0.7
         });
-        const hatch2 = new L.StripePattern({
+        const hatchHi2 = new L.StripePattern({
             color: '#ff00ff', spaceColor: 'transparent',
-            weight: 0.5, spaceWeight: 4, angle: -45, opacity: 0.6
+            weight: 0.5, spaceWeight: 3, angle: -45, opacity: 0.7
         });
-        hatch1.addTo(map);
-        hatch2.addTo(map);
+        // Moderate risk: sparse cross-hatch (lighter magenta)
+        const hatchMod1 = new L.StripePattern({
+            color: '#cc66cc', spaceColor: 'transparent',
+            weight: 0.5, spaceWeight: 5, angle: 45, opacity: 0.4
+        });
+        const hatchMod2 = new L.StripePattern({
+            color: '#cc66cc', spaceColor: 'transparent',
+            weight: 0.5, spaceWeight: 5, angle: -45, opacity: 0.4
+        });
+        [hatchHi1, hatchHi2, hatchMod1, hatchMod2].forEach(h => h.addTo(map));
 
-        fetch('data/hazard-zones/tornado-zones.geojson').then(r => r.json()).then(data => {
+        fetch(PROXY_BASE + '/data/hazard-zones/tornado-zones.geojson').then(r => r.json()).then(data => {
             const group = L.layerGroup([], { pane: 'hazardPane' });
-            // First diagonal
-            L.geoJSON(data, {
-                pane: 'hazardPane',
-                style: {
-                    color: '#ff00ff', weight: 0.5, opacity: 0.4,
-                    fillPattern: hatch1, fillOpacity: 1
-                },
-                onEachFeature: (feat, layer) => {
-                    const name = feat.properties.name || 'Зона торнадо';
-                    layer.bindPopup(name);
-                }
-            }).addTo(group);
-            // Second diagonal (cross-hatch)
-            L.geoJSON(data, {
-                pane: 'hazardPane',
-                style: {
-                    color: 'transparent', weight: 0,
-                    fillPattern: hatch2, fillOpacity: 1
-                }
-            }).addTo(group);
+            const highFeatures = data.features.filter(f => f.properties.risk_level === 'high');
+            const modFeatures = data.features.filter(f => f.properties.risk_level === 'moderate');
+
+            // High risk layer
+            if (highFeatures.length) {
+                L.geoJSON({type:'FeatureCollection', features: highFeatures}, {
+                    pane: 'hazardPane',
+                    style: { color: '#ff00ff', weight: 0.5, opacity: 0.5, fillPattern: hatchHi1, fillOpacity: 1 },
+                    onEachFeature: (feat, layer) => layer.bindPopup(feat.properties.name)
+                }).addTo(group);
+                L.geoJSON({type:'FeatureCollection', features: highFeatures}, {
+                    pane: 'hazardPane',
+                    style: { color: 'transparent', weight: 0, fillPattern: hatchHi2, fillOpacity: 1 }
+                }).addTo(group);
+            }
+            // Moderate risk layer
+            if (modFeatures.length) {
+                L.geoJSON({type:'FeatureCollection', features: modFeatures}, {
+                    pane: 'hazardPane',
+                    style: { color: '#cc66cc', weight: 0.5, opacity: 0.3, fillPattern: hatchMod1, fillOpacity: 1 },
+                    onEachFeature: (feat, layer) => layer.bindPopup(feat.properties.name)
+                }).addTo(group);
+                L.geoJSON({type:'FeatureCollection', features: modFeatures}, {
+                    pane: 'hazardPane',
+                    style: { color: 'transparent', weight: 0, fillPattern: hatchMod2, fillOpacity: 1 }
+                }).addTo(group);
+            }
+
             group.addTo(map);
             hazardLayers[type] = group;
-            setStatus('✓ Зоны торнадо (Tornado + Dixie Alley)');
+            setStatus('✓ Зоны торнадо (FEMA NRI: ' + (highFeatures.length + modFeatures.length) + ' уездов)');
         }).catch(e => setStatus('⚠ Торнадо: ' + e.message));
     }
 }
