@@ -131,12 +131,13 @@ html, body { height: 100%; width: 100%; overflow: hidden; }
     font-size: 11px; width: 12px; text-align: center; line-height: 10px;
 }
 
-/* Population pane - multiply blend + black dot effect */
+/* Population pane - multiply blend: bright GIBS pop tiles become dark marks on light map */
 .leaflet-pop-pane {
     mix-blend-mode: multiply;
 }
+/* GIBS pop density: bright = high pop. grayscale + high contrast to make it pop */
 .pop-density-overlay {
-    filter: grayscale(100%) contrast(300%) brightness(0.3) invert(1);
+    filter: grayscale(100%) contrast(200%) brightness(1.5);
 }
 
 /* Hazard pane */
@@ -263,10 +264,11 @@ map.getPane('hazardPane').style.pointerEvents = 'auto';
 
 // --- Hypsometric shader (Mapbox terrain-RGB encoding) ---
 const hypsoShader = `
+precision mediump float;
 void main(void) {
-    highp vec4 texelColour = texture2D(uTexture0, vec2(vTextureCoords.s, vTextureCoords.t));
+    vec4 texelColour = texture2D(uTexture0, vec2(vTextureCoords.s, vTextureCoords.t));
     // Mapbox encoding: height = -10000 + (r*65536 + g*256 + b) * 0.1
-    highp float height = (
+    float height = (
         texelColour.r * 65536.0 +
         texelColour.g * 256.0 +
         texelColour.b
