@@ -173,10 +173,13 @@ html, body { height: 100%; width: 100%; overflow: hidden; }
     <div class="legend-row"><span class="legend-swatch" style="background:#808080"></span>Dfc — субарктич.</div>
     <div class="legend-row"><span class="legend-swatch" style="background:#C0C0C0"></span>ET — тундра</div>
     <div style="font-weight:bold;margin-top:6px;font-size:11px">Катаклизмы:</div>
-    <div class="legend-row"><span class="legend-swatch tri" style="border-bottom-color:#ff4444"></span>△ Вулканы</div>
-    <div class="legend-row"><span class="legend-swatch" style="background:#ff6600;border-radius:50%"></span>● Землетрясения</div>
+    <div class="legend-row"><span class="legend-swatch tri" style="border-bottom-color:#ff0000"></span>△ Вулканы (истор.)</div>
+    <div class="legend-row"><span class="legend-swatch tri" style="border-bottom-color:#ff6600"></span>△ Вулканы (дремл.)</div>
+    <div class="legend-row"><span class="legend-swatch" style="background:#ff5500;border-radius:50%"></span>⫽ Землетрясения</div>
     <div class="legend-row"><span class="legend-swatch" style="background:repeating-linear-gradient(45deg,transparent,transparent 3px,#00ffff 3px,#00ffff 4px);border:1px dashed #00ffff"></span>⫽ Ураганы (зоны)</div>
-    <div class="legend-row"><span class="legend-swatch cross" style="color:#ff00ff">✕</span>Торнадо (США)</div>
+    <div class="legend-row"><span class="legend-swatch cross" style="color:#ff00ff">✕</span>Торнадо: высокий</div>
+    <div class="legend-row"><span class="legend-swatch cross" style="color:#dd44dd">✕</span>Торнадо: умеренный</div>
+    <div class="legend-row"><span class="legend-swatch cross" style="color:#bb66bb">✕</span>Торнадо: низкий</div>
 </details>
 
 <div id="map"></div>
@@ -401,8 +404,8 @@ function loadHazard(type) {
         fetch(PROXY_BASE + '/volcanoes.json').then(r => r.json()).then(data => {
             const group = L.layerGroup([], { pane: 'hazardPane' });
             data.forEach(v => {
-                const color = v.status === 'Historical' ? '#ff4444' :
-                              v.status.startsWith('D') ? '#ff8844' : '#ffaa44';
+                const color = v.status === 'Historical' ? '#ff0000' :
+                              v.status.startsWith('D') ? '#ff6600' : '#ff9900';
                 L.marker([v.lat, v.lon], { icon: volcanoIcon(color), pane: 'hazardPane' })
                     .bindPopup(`<b>${v.n}</b><br>${v.type}<br>Высота: ${v.elev}м<br>${v.status}`)
                     .addTo(group);
@@ -418,12 +421,12 @@ function loadHazard(type) {
 
         // Grid/cell patterns
         const gridH = new L.StripePattern({
-            color: '#ff6600', spaceColor: 'transparent',
-            weight: 0.5, spaceWeight: 4, angle: 0, opacity: 0.4
+            color: '#ff5500', spaceColor: 'transparent',
+            weight: 0.5, spaceWeight: 4, angle: 0, opacity: 0.8
         });
         const gridV = new L.StripePattern({
-            color: '#ff6600', spaceColor: 'transparent',
-            weight: 0.5, spaceWeight: 4, angle: 90, opacity: 0.4
+            color: '#ff5500', spaceColor: 'transparent',
+            weight: 0.5, spaceWeight: 4, angle: 90, opacity: 0.8
         });
         gridH.addTo(map);
         gridV.addTo(map);
@@ -436,9 +439,9 @@ function loadHazard(type) {
             L.geoJSON(zoneData, {
                 pane: 'hazardPane',
                 style: {
-                    color: '#ff6600',
+                    color: '#ff5500',
                     weight: 0.5,
-                    opacity: 0.4,
+                    opacity: 0.8,
                     dashArray: '4,3',
                     fillPattern: gridH,
                     fillOpacity: 1
@@ -485,7 +488,7 @@ function loadHazard(type) {
 
         const stripes = new L.StripePattern({
             color: '#00ffff', spaceColor: 'transparent',
-            weight: 0.5, spaceWeight: 5, angle: 45, opacity: 0.7
+            weight: 0.5, spaceWeight: 5, angle: 45, opacity: 1.0
         });
         stripes.addTo(map);
 
@@ -496,7 +499,7 @@ function loadHazard(type) {
                 style: {
                     color: '#00ffff',
                     weight: 0.5,
-                    opacity: 0.5,
+                    opacity: 0.8,
                     fillPattern: stripes,
                     fillOpacity: 1
                 },
@@ -517,38 +520,38 @@ function loadHazard(type) {
         // High risk: dense cross-hatch (magenta)
         const hatchHi1 = new L.StripePattern({
             color: '#ff00ff', spaceColor: 'transparent',
-            weight: 0.5, spaceWeight: 3, angle: 45, opacity: 0.7
+            weight: 0.5, spaceWeight: 3, angle: 45, opacity: 1.0
         });
         const hatchHi2 = new L.StripePattern({
             color: '#ff00ff', spaceColor: 'transparent',
-            weight: 0.5, spaceWeight: 3, angle: -45, opacity: 0.7
+            weight: 0.5, spaceWeight: 3, angle: -45, opacity: 1.0
         });
         // Moderate risk: sparse cross-hatch (lighter magenta)
         const hatchMod1 = new L.StripePattern({
-            color: '#cc66cc', spaceColor: 'transparent',
-            weight: 0.5, spaceWeight: 5, angle: 45, opacity: 0.4
+            color: '#dd44dd', spaceColor: 'transparent',
+            weight: 0.5, spaceWeight: 5, angle: 45, opacity: 0.7
         });
         const hatchMod2 = new L.StripePattern({
-            color: '#cc66cc', spaceColor: 'transparent',
-            weight: 0.5, spaceWeight: 5, angle: -45, opacity: 0.4
+            color: '#dd44dd', spaceColor: 'transparent',
+            weight: 0.5, spaceWeight: 5, angle: -45, opacity: 0.7
         });
         // Low risk: very sparse cross-hatch (pale)
         const hatchLo1 = new L.StripePattern({
-            color: '#aa88aa', spaceColor: 'transparent',
-            weight: 0.5, spaceWeight: 7, angle: 45, opacity: 0.2
+            color: '#bb66bb', spaceColor: 'transparent',
+            weight: 0.5, spaceWeight: 7, angle: 45, opacity: 0.4
         });
         const hatchLo2 = new L.StripePattern({
-            color: '#aa88aa', spaceColor: 'transparent',
-            weight: 0.5, spaceWeight: 7, angle: -45, opacity: 0.2
+            color: '#bb66bb', spaceColor: 'transparent',
+            weight: 0.5, spaceWeight: 7, angle: -45, opacity: 0.4
         });
         [hatchHi1, hatchHi2, hatchMod1, hatchMod2, hatchLo1, hatchLo2].forEach(h => h.addTo(map));
 
         fetch(PROXY_BASE + '/data/hazard-zones/tornado-zones.geojson').then(r => r.json()).then(data => {
             const group = L.layerGroup([], { pane: 'hazardPane' });
             const levels = [
-                { key: 'high', color: '#ff00ff', opacity: 0.5, h1: hatchHi1, h2: hatchHi2 },
-                { key: 'moderate', color: '#cc66cc', opacity: 0.3, h1: hatchMod1, h2: hatchMod2 },
-                { key: 'low', color: '#aa88aa', opacity: 0.2, h1: hatchLo1, h2: hatchLo2 }
+                { key: 'high', color: '#ff00ff', opacity: 0.8, h1: hatchHi1, h2: hatchHi2 },
+                { key: 'moderate', color: '#dd44dd', opacity: 0.6, h1: hatchMod1, h2: hatchMod2 },
+                { key: 'low', color: '#bb66bb', opacity: 0.4, h1: hatchLo1, h2: hatchLo2 }
             ];
             let totalCells = 0;
             levels.forEach(lv => {
