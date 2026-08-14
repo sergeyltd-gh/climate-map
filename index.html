@@ -318,13 +318,14 @@ const bases = {
     sat: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
         attribution: 'Esri', maxZoom: 19, noWrap: false
     }),
-    hypsometric: L.tileLayer.gl({
-        fragmentShader: hypsoShader,
-        tileUrls: ['https://api.trailsplits.com/tiles/v1/terrainrgb/current/{z}/{x}/{y}.png'],
-        attribution: 'Terrain: TrailSplits (Copernicus DEM 30m)',
-        maxZoom: 12,
-        noWrap: false
-    })
+    hypsometric: L.tileLayer(
+        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Physical_Map/MapServer/tile/{z}/{y}/{x}',
+        {
+            attribution: 'Esri World Physical Map',
+            maxZoom: 8,
+            noWrap: false
+        }
+    )
 };
 
 let currentBase = bases.dark.addTo(map);
