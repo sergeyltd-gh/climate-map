@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+<title>Климат и Население</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; width: 100%; overflow: hidden; }
+#map { height: 100%; width: 100%; background: #1a1a2e; }
+
+/* Compact dark panels */
+.panel {
+    background: rgba(26,26,46,0.92);
+    color: #eee;
+    border-radius: 8px;
+    border: 1px solid #444;
+    font-family: -apple-system, system-ui, sans-serif;
+}
+
+/* Top info bar */
+#info-bar {
+    position: absolute;
+    top: 8px;
+    left: 50px;
+    z-index: 1000;
+    padding: 6px 10px;
+    font-size: 12px;
+    line-height: 1.4;
+    max-width: calc(100vw - 220px);
+}
+#info-bar b { font-size: 13px; }
+#info-bar .status { color: #0f0; font-size: 11px; }
+
+/* Bottom control panel */
+#controls {
+    position: absolute;
+    bottom: 8px;
+    left: 8px;
+    right: 8px;
+    z-index: 1000;
+    padding: 10px 12px;
+    font-size: 12px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+    align-items: center;
+}
+#controls .ctrl-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+#controls label { white-space: nowrap; font-size: 11px; color: #ccc; }
+#controls input[type="range"] { width: 70px; }
+#controls select {
+    background: #2a2a3e;
+    color: #eee;
+    border: 1px solid #555;
+    border-radius: 4px;
+    padding: 2px 4px;
+    font-size: 11px;
+}
+#controls .layer-toggles {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+#controls .layer-toggles label {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    cursor: pointer;
+    font-size: 11px;
+}
+
+/* Hazard selector - radio buttons */
+#controls .hazard-group {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+#controls .hazard-group label.hazard-toggle {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    cursor: pointer;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 1px solid #555;
+    transition: background 0.2s;
+}
+#controls .hazard-group label.hazard-toggle.active {
+    background: #3a3a5e;
+    border-color: #888;
+}
+#controls .hazard-group input { display: none; }
+
+/* Legend - collapsible */
+#legend {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 1000;
+    padding: 8px 10px;
+    font-size: 10px;
+    max-width: 170px;
+    max-height: 50vh;
+    overflow-y: auto;
+}
+#legend summary {
+    font-size: 12px;
+    font-weight: bold;
+    cursor: pointer;
+    margin-bottom: 4px;
+}
+#legend[open] summary { margin-bottom: 6px; }
+.legend-row { display: flex; align-items: center; margin: 1px 0; }
+.legend-swatch { width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; flex-shrink: 0; }
+.legend-swatch.tri {
+    width: 0; height: 0; background: none !important;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-bottom: 9px solid;
+    border-radius: 0;
+}
+.legend-swatch.cross {
+    background: none !important; border-radius: 0;
+    font-size: 11px; width: 12px; text-align: center; line-height: 10px;
+}
+
+/* Population pane - multiply blend */
+.leaflet-pop-pane {
+    mix-blend-mode: multiply;
+}
+
+/* Hazard pane */
+.leaflet-hazard-pane {
+    z-index: 500;
+}
+
+/* Keep Leaflet controls on top */
+.leaflet-top { z-index: 999; }
+.leaflet-control-zoom { margin: 8px !important; }
+</style>
+</head>
+<body>
+<div id="info-bar" class="panel">
+    <b>🌍 Климат и Население</b><br>
+    <span class="status" id="pop-status">Загрузка…</span>
+</div>
+
+<details id="legend" class="panel" open>
+    <summary>Легенда</summary>
+    <div style="font-weight:bold;margin-top:4px;font-size:11px">Климат:</div>
+    <div class="legend-row"><span class="legend-swatch" style="background:#000080"></span>Af — троп. лес</div>
+    <div class="legend-row"><span class="legend-swatch" style="background:#008000"></span>Am — муссонный</div>
+    <div class="legend-row"><span class="legend-swatch" style="background:#00FF00"></span>Aw — саванна</div>
+    <div class="legend-row"><span class="legend-swatch" style="background:#FF0000"></span>BWh — жарк. пустыня</div>
+    <div class="legend-row"><span class="legend-swatch" style="background:#FF8000"></span>BWk — холод. пустыня</div>
+    <div class="legend-row"><span class="legend-swatch" style="background:#FFFF00"></span>BSh — степь жарк.</div>
+    <div class="legend-row"><span class="legend-swatch" style="background:#80FF00"></span>BSk — степь холод.</div>
+    <div class="legend-row"><span class="legend-swatch" style="background:#80FFFF"></span>Csa — средизем.</div>
+    <div class="legend-row"><span class="legend-swatch" style="background:#0080FF"></span>Cfa — субтроп. влажный</div>
+    <div class="legend-row"><span class="legend-swatch" style="background:#0000FF"></span>Cfb — океанический</div>
+    <div class="legend-row"><span class="legend-swatch" style="background:#FF00FF"></span>Dfa — континентал.</div>
+    <div class="legend-row"><span class="legend-swatch" style="background:#808080"></span>Dfc — субарктич.</div>
+    <div class="legend-row"><span class="legend-swatch" style="background:#C0C0C0"></span>ET — тундра</div>
+    <div style="font-weight:bold;margin-top:6px;font-size:11px">Катаклизмы:</div>
+    <div class="legend-row"><span class="legend-swatch tri" style="border-bottom-color:#ff4444"></span>△ Вулканы</div>
+    <div class="legend-row"><span class="legend-swatch" style="background:#ff6600;border-radius:50%"></span>● Землетрясения</div>
+    <div class="legend-row"><span class="legend-swatch" style="background:repeating-linear-gradient(45deg,transparent,transparent 3px,#00ffff 3px,#00ffff 4px);border:1px dashed #00ffff"></span>⫽ Ураганы (зоны)</div>
+    <div class="legend-row"><span class="legend-swatch cross" style="color:#ff00ff">✕</span>Торнадо (США)</div>
+</details>
+
+<div id="map"></div>
+
+<div id="controls" class="panel">
+    <div class="ctrl-group">
+        <label>Фон:</label>
+        <select id="base-select">
+            <option value="dark">Тёмная</option>
+            <option value="light">Светлая</option>
+            <option value="sat">Спутник</option>
+            <option value="hypsometric">Рельеф 3D</option>
+        </select>
+    </div>
+    <div class="ctrl-group">
+        <label>Климат:</label>
+        <input type="range" id="koppen-opacity" min="0" max="100" value="100">
+        <span id="koppen-val">100%</span>
+    </div>
+    <div class="ctrl-group">
+        <label>Население:</label>
+        <input type="range" id="pop-opacity" min="0" max="100" value="60">
+        <span id="pop-val">60%</span>
+    </div>
+    <div class="layer-toggles">
+        <label><input type="checkbox" id="toggle-koppen" checked> Климат</label>
+        <label><input type="checkbox" id="toggle-pop" checked> Население</label>
+    </div>
+    <div class="ctrl-group">
+        <label>Катаклизмы:</label>
+        <div class="hazard-group" id="hazard-selector">
+            <label data-hazard="volcanoes" class="hazard-toggle"><input type="checkbox" value="volcanoes">△ Вулканы</label>
+            <label data-hazard="earthquakes" class="hazard-toggle"><input type="checkbox" value="earthquakes">⫽ Землетр.</label>
+            <label data-hazard="hurricanes" class="hazard-toggle"><input type="checkbox" value="hurricanes">⫽ Ураганы</label>
+            <label data-hazard="tornadoes" class="hazard-toggle"><input type="checkbox" value="tornadoes">✕ Торнадо</label>
+        </div>
+    </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/pmtiles@4.4.0/dist/pmtiles.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet.tilelayer.gl@2.4.1/src/Leaflet.TileLayer.GL.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet.pattern@0.1.0/dist/leaflet.pattern.min.js"></script>
+<script>
+// --- Köppen WMS layer ---
+const koppenWMS = L.tileLayer.wms('https://koppen.earth/tiles/wms', {
+    layers: 'koppen',
+    styles: '',
+    format: 'image/png',
+    transparent: false,
+    version: '1.1.1',
+    expression: 'CMIP6Koppen.reanalysis@(year=2020)',
+    cmap: 'koppen',
+    vmin: 1,
+    vmax: 30,
+    width: 256,
+    height: 256,
+    srs: 'EPSG:3857',
+    attribution: 'Beck et al. (2023), GloH2O',
+    zIndex: 5,
+    noWrap: false
+});
+
+// --- Map setup ---
+const map = L.map('map', {
+    center: [40, 10],
+    zoom: 4,
+    minZoom: 2,
+    maxZoom: 10,
+    worldCopyJump: true,
+    zoomControl: true,
+    attributionControl: true,
+    maxBounds: [[-90, -Infinity], [90, Infinity]],
+});
+
+// Population pane
+map.createPane('popPane');
+map.getPane('popPane').style.zIndex = 400;
+map.getPane('popPane').style.pointerEvents = 'none';
+
+// Hazard pane
+map.createPane('hazardPane');
+map.getPane('hazardPane').style.zIndex = 500;
+map.getPane('hazardPane').style.pointerEvents = 'auto';
+
+// --- Hypsometric shader (Terrarium encoding) ---
+const hypsoShader = `
+void main(void) {
+    highp vec4 texelColour = texture2D(uTexture0, vec2(vTextureCoords.s, vTextureCoords.t));
+    // Terrarium encoding: height = (r*256 + g + b/256) - 32768
+    highp float height = (
+        texelColour.r * 256.0 +
+        texelColour.g +
+        texelColour.b / 256.0
+    ) - 32768.0;
+
+    // Hypsometric color ramp
+    vec4 colours[6];
+    colours[0] = vec4(0.05, 0.15, 0.35, -500.0);   // deep blue (below sea)
+    colours[1] = vec4(0.15, 0.35, 0.55, 0.0);       // coast
+    colours[2] = vec4(0.30, 0.55, 0.30, 500.0);     // green lowland
+    colours[3] = vec4(0.60, 0.65, 0.35, 2000.0);    // yellow-brown hills
+    colours[4] = vec4(0.55, 0.40, 0.25, 4000.0);    // brown mountains
+    colours[5] = vec4(0.95, 0.95, 0.95, 6000.0);    // white snow
+
+    gl_FragColor.rgb = colours[0].rgb;
+    for (int i = 0; i < 5; i++) {
+        gl_FragColor.rgb = mix(
+            gl_FragColor.rgb,
+            colours[i+1].rgb,
+            smoothstep(colours[i].a, colours[i+1].a, height)
+        );
+    }
+    gl_FragColor.a = 1.0;
+}
+`;
+
+// --- Base layers ---
+const bases = {
+    dark: L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png', {
+        attribution: '&copy; OSM, &copy; CARTO', subdomains: 'abcd', maxZoom: 19, noWrap: false
+    }),
+    light: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OSM', subdomains: 'abc', noWrap: false
+    }),
+    sat: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Esri', maxZoom: 19, noWrap: false
+    }),
+    hypsometric: L.tileLayer.gl({
+        fragmentShader: hypsoShader,
+        tileUrls: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
+        attribution: 'Terrain: AWS Open Data (Mapzen)',
+        maxZoom: 12,
+        noWrap: false
+    })
+};
+
+let currentBase = bases.dark.addTo(map);
+koppenWMS.addTo(map);
+
+// Load population PMTiles
+const pmt = new pmtiles.PMTiles('/proxy/pmtiles');
+pmt.getHeader().then(() => {
+    const popLayer = pmtiles.leafletRasterLayer(pmt, {
+        attribution: 'GHSL 2020, EU JRC',
+        pane: 'popPane',
+        maxZoom: 10,
+        minZoom: 2,
+        opacity: 0.6
+    });
+    popLayer.addTo(map);
+    document.getElementById('pop-status').textContent = '✓ Население загружено';
+
+    const popSlider = document.getElementById('pop-opacity');
+    const popVal = document.getElementById('pop-val');
+    popSlider.addEventListener('input', e => {
+        popLayer.setOpacity(e.target.value / 100);
+        popVal.textContent = e.target.value + '%';
+    });
+    document.getElementById('toggle-pop').addEventListener('change', e => {
+        if (e.target.checked) map.addLayer(popLayer);
+        else map.removeLayer(popLayer);
+    });
+}).catch(err => {
+    document.getElementById('pop-status').textContent = '⚠ Население: ' + err.message;
+});
+
+// --- Hazard layers (toggle on/off, multiple can be active) ---
+const hazardLayers = {};  // type -> L.LayerGroup
+
+function toggleHazard(type, checkbox) {
+    const label = checkbox.closest('label');
+    if (checkbox.checked) {
+        label.classList.add('active');
+        if (!hazardLayers[type]) {
+            loadHazard(type);
+        } else {
+            hazardLayers[type].addTo(map);
+        }
+    } else {
+        label.classList.remove('active');
+        if (hazardLayers[type]) {
+            map.removeLayer(hazardLayers[type]);
+        }
+    }
+}
+
+// Triangle icon for volcanoes (no fill, outline only)
+function volcanoIcon(color) {
+    return L.divIcon({
+        className: 'volcano-icon',
+        html: `<svg width="14" height="14" viewBox="0 0 14 14" xmlns="http://www.w3.org/2000/svg">
+            <polygon points="7,2 12,12 2,12" fill="none" stroke="${color}" stroke-width="1"/>
+        </svg>`,
+        iconSize: [14, 14],
+        iconAnchor: [7, 7]
+    });
+}
+
+function loadHazard(type) {
+    const setStatus = (msg) => {
+        document.getElementById('pop-status').textContent = msg;
+    };
+
+    if (type === 'volcanoes') {
+        setStatus('Загрузка вулканов…');
+        fetch('volcanoes.json').then(r => r.json()).then(data => {
+            const group = L.layerGroup([], { pane: 'hazardPane' });
+            data.forEach(v => {
+                const color = v.status === 'Historical' ? '#ff4444' :
+                              v.status.startsWith('D') ? '#ff8844' : '#ffaa44';
+                L.marker([v.lat, v.lon], { icon: volcanoIcon(color), pane: 'hazardPane' })
+                    .bindPopup(`<b>${v.n}</b><br>${v.type}<br>Высота: ${v.elev}м<br>${v.status}`)
+                    .addTo(group);
+            });
+            group.addTo(map);
+            hazardLayers[type] = group;
+            setStatus(`✓ Вулканов: ${data.length}`);
+        }).catch(e => setStatus('⚠ Вулканы: ' + e.message));
+
+    } else if (type === 'earthquakes') {
+        // Earthquake zones: thin fault lines + buffered zones with dashed outline + grid hatch
+        setStatus('Загрузка зон землетрясений…');
+
+        // Grid/cell patterns
+        const gridH = new L.StripePattern({
+            color: '#ff6600', spaceColor: 'transparent',
+            weight: 1, spaceWeight: 4, angle: 0, opacity: 0.4
+        });
+        const gridV = new L.StripePattern({
+            color: '#ff6600', spaceColor: 'transparent',
+            weight: 1, spaceWeight: 4, angle: 90, opacity: 0.4
+        });
+        gridH.addTo(map);
+        gridV.addTo(map);
+
+        const group = L.layerGroup([], { pane: 'hazardPane' });
+
+        // Load seismic zone polygons (buffered fault lines) with grid hatch + dashed outline
+        fetch('data/hazard-zones/seismic-zones.geojson').then(r => r.json()).then(zoneData => {
+            // Horizontal grid
+            L.geoJSON(zoneData, {
+                pane: 'hazardPane',
+                style: {
+                    color: '#ff6600',
+                    weight: 1,
+                    opacity: 0.4,
+                    dashArray: '4,3',
+                    fillPattern: gridH,
+                    fillOpacity: 1
+                },
+                onEachFeature: (feat, layer) => {
+                    layer.bindPopup('Зона сейсмической активности');
+                }
+            }).addTo(group);
+            // Vertical grid (cross-hatch)
+            L.geoJSON(zoneData, {
+                pane: 'hazardPane',
+                style: {
+                    color: 'transparent', weight: 0,
+                    fillPattern: gridV, fillOpacity: 1
+                }
+            }).addTo(group);
+
+            // Load fault lines as thin 1px lines on top (GEM Active Faults)
+            fetch('data/hazard-zones/gem-faults.geojson').then(r2 => r2.json()).then(faultData => {
+                L.geoJSON(faultData, {
+                    pane: 'hazardPane',
+                    style: {
+                        color: '#ffaa44',
+                        weight: 1,
+                        opacity: 0.7
+                    },
+                    onEachFeature: (feat, layer) => {
+                        const name = feat.properties.n || 'Разлом';
+                        const slip = feat.properties.s ? 'Slip: ' + feat.properties.s + ' мм/год' : '';
+                        const type = feat.properties.t || '';
+                        layer.bindPopup(name + '<br>' + type + '<br>' + slip);
+                    }
+                }).addTo(group);
+
+                group.addTo(map);
+                hazardLayers[type] = group;
+                setStatus('✓ Зоны землетрясений (GEM, ' + faultData.features.length + ' разломов)');
+            });
+        }).catch(e => setStatus('⚠ Землетрясения: ' + e.message));
+
+    } else if (type === 'hurricanes') {
+        // WMO-defined tropical cyclone basins from GeoJSON
+        setStatus('Загрузка зон ураганов…');
+
+        const stripes = new L.StripePattern({
+            color: '#00ffff', spaceColor: 'transparent',
+            weight: 1, spaceWeight: 5, angle: 45, opacity: 0.7
+        });
+        stripes.addTo(map);
+
+        fetch('data/hazard-zones/tropical-cyclone-basins.geojson').then(r => r.json()).then(data => {
+            const group = L.layerGroup([], { pane: 'hazardPane' });
+            L.geoJSON(data, {
+                pane: 'hazardPane',
+                style: {
+                    color: '#00ffff',
+                    weight: 1,
+                    opacity: 0.5,
+                    fillPattern: stripes,
+                    fillOpacity: 1
+                },
+                onEachFeature: (feat, layer) => {
+                    const name = feat.properties.name || feat.properties.basin || feat.properties.BASIN || 'Бассейн';
+                    layer.bindPopup('Зона тропических циклонов: ' + name);
+                }
+            }).addTo(group);
+            group.addTo(map);
+            hazardLayers[type] = group;
+            setStatus('✓ Зоны ураганов (WMO бассейны)');
+        }).catch(e => setStatus('⚠ Ураганы: ' + e.message));
+
+    } else if (type === 'tornadoes') {
+        // Tornado risk zones from GeoJSON with cross-hatch pattern
+        setStatus('Загрузка зон торнадо…');
+
+        const hatch1 = new L.StripePattern({
+            color: '#ff00ff', spaceColor: 'transparent',
+            weight: 1, spaceWeight: 4, angle: 45, opacity: 0.6
+        });
+        const hatch2 = new L.StripePattern({
+            color: '#ff00ff', spaceColor: 'transparent',
+            weight: 1, spaceWeight: 4, angle: -45, opacity: 0.6
+        });
+        hatch1.addTo(map);
+        hatch2.addTo(map);
+
+        fetch('data/hazard-zones/tornado-zones.geojson').then(r => r.json()).then(data => {
+            const group = L.layerGroup([], { pane: 'hazardPane' });
+            // First diagonal
+            L.geoJSON(data, {
+                pane: 'hazardPane',
+                style: {
+                    color: '#ff00ff', weight: 1, opacity: 0.4,
+                    fillPattern: hatch1, fillOpacity: 1
+                },
+                onEachFeature: (feat, layer) => {
+                    const name = feat.properties.name || 'Зона торнадо';
+                    layer.bindPopup(name);
+                }
+            }).addTo(group);
+            // Second diagonal (cross-hatch)
+            L.geoJSON(data, {
+                pane: 'hazardPane',
+                style: {
+                    color: 'transparent', weight: 0,
+                    fillPattern: hatch2, fillOpacity: 1
+                }
+            }).addTo(group);
+            group.addTo(map);
+            hazardLayers[type] = group;
+            setStatus('✓ Зоны торнадо (Tornado + Dixie Alley)');
+        }).catch(e => setStatus('⚠ Торнадо: ' + e.message));
+    }
+}
+
+// Hazard checkbox toggles
+document.querySelectorAll('#hazard-selector input[type="checkbox"]').forEach(cb => {
+    cb.addEventListener('change', e => {
+        toggleHazard(e.target.value, e.target);
+    });
+});
+
+// --- Controls ---
+document.getElementById('base-select').addEventListener('change', e => {
+    map.removeLayer(currentBase);
+    currentBase = bases[e.target.value];
+    map.addLayer(currentBase);
+    currentBase.bringToBack();
+
+    // Auto-adjust climate opacity for hypsometric
+    if (e.target.value === 'hypsometric') {
+        koppenWMS.setOpacity(0.6);
+        document.getElementById('koppen-opacity').value = 60;
+        document.getElementById('koppen-val').textContent = '60%';
+    }
+});
+
+const koppenSlider = document.getElementById('koppen-opacity');
+const koppenVal = document.getElementById('koppen-val');
+koppenSlider.addEventListener('input', e => {
+    koppenWMS.setOpacity(e.target.value / 100);
+    koppenVal.textContent = e.target.value + '%';
+});
+
+document.getElementById('toggle-koppen').addEventListener('change', e => {
+    if (e.target.checked) map.addLayer(koppenWMS);
+    else map.removeLayer(koppenWMS);
+});
+</script>
+</body>
+</html>
