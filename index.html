@@ -328,7 +328,7 @@ let currentBase = bases.dark.addTo(map);
 koppenWMS.addTo(map);
 
 // Load population PMTiles
-const pmtUrl = IS_GITHUB ? PROXY_BASE + '/proxy/pmtiles' : '/proxy/pmtiles';
+const pmtUrl = (IS_GITHUB || IS_FUNNEL) ? PROXY_BASE + '/proxy/pmtiles' : '/proxy/pmtiles';
 const pmt = new pmtiles.PMTiles(pmtUrl);
 pmt.getHeader().then(() => {
     const popLayer = pmtiles.leafletRasterLayer(pmt, {
